@@ -47,6 +47,7 @@
 .eqv PLATFORM_COLOR_2 0x637f40	# Grass platform color
 .eqv ZOMBIE_BORDER_COLOR 0xff0000	# Zombie border color (red)
 .eqv SKELETON_BORDER_COLOR 0xa8a8a8		# Skeleton border color (grey)
+.eqv SKELETON_ARROW_COLOR 0xd1d1d1		# Skeleton border color (grey)
 
 
 .data
@@ -296,11 +297,14 @@ GameLoop:
 UpdateSkeletonArrowAddress:
 	la $t0, skeletonArrowAddress
 	lw $t1, skeletonArrowAddress
-	
 	sub $t9, $t1, $s0
 	move $t2, $v1
 	add $t2, $t2, $t9	# $t2 stores the background address at the current arrow
 	
+	addi $t2, $t2, -4
+	sw $zero, 0($t2)
+	addi $t2, $t2, 4
+		
 	beq $t1, 0x1000a518, SkipUnrenderCurrentSkeletonArrow	# Don't unrender the past spot of arrow when in initial state
 		addi $t2, $t2, -4
 		lw $t8, 0($t2)
@@ -308,25 +312,49 @@ UpdateSkeletonArrowAddress:
 		sw $t8, 0($t1)
 		addi $t2, $t2, 4
 		addi $t1, $t1, 4
+		
 	SkipUnrenderCurrentSkeletonArrow:
-	
 	beq $t1, 268477948, ResetSkeletonArrow
-	li $t9, 0xd1d1d1
+	li $t9, SKELETON_ARROW_COLOR
 	sw $t9, 0($t1)
 	addi $t1, $t1, 4
 	sw $t1, 0($t0)
+	sw $t9, 0($t2)
+	
 	j ResetSkeletonArrowEnd
 	ResetSkeletonArrow:
 		li $t9, 0x1000a518
 		sw $t9, 0($t0)
 	ResetSkeletonArrowEnd:
-	
 	addi $sp, $sp, -4
 	sw $ra, 0($sp)
 	jal Sleep
 	lw $ra, 0($sp)
 	addi $sp, $sp, 4
+	jr $ra
+
+CheckSkeletonArrowCollision:
+	lw $t0, skeletonArrowAddress	# $t0 is skeleton arrow's current address
+	move $t1, $s2	# $t1 is player's current address
+
 	
+	move $t2, $v1
+	add $t2, $t2, $t9	# $t2 stores the background address at the current arrow
+	lw $t3, 0($t2)	# $t3 stores the background color at the current arrow
+	
+	bne $t3, 0xd5e3ff, Testing
+	j SkipTesting
+	
+	Testing:
+	addi $sp, $sp, -4
+	sw $ra, 0($sp)
+	move $s7, $t1
+	jal Debug
+	lw $ra, 0($sp)
+	addi $sp, $sp, 4
+
+	SkipTesting:
+
 	jr $ra
 
 DrawPlayerArrow:
@@ -818,7 +846,7 @@ CheckCollision:
 	
 	CheckCollisionLoop:
 		bge $t2, 10, CheckCollisionEnd
-			li $t3, 0		#$t3 is a looping variable that goes from j = 0 to 6
+			li $t3, 0		# $t3 is a looping variable that goes from j = 0 to 6
 			CheckCollisionInnerLoop:
 				bge $t3, 6, CheckCollisionInnerLoopEnd
 				lw $t6, 0($t7)	# $t6 = background color of the current player color pixel
@@ -838,6 +866,8 @@ CheckCollision:
 				beq $t6, $t5, CollisionWithFriendlyUnitAtPixel
 				li $t5, ZOMBIE_BORDER_COLOR
 				beq $t6, $t5, CollisionWithZombieAtPixel
+				li $t5, SKELETON_ARROW_COLOR
+				beq $t6, $t5, CollisionWithSkeletonArrowAtPixel
 				j CheckCollisionInnerLoopIncrement
 				CollisionWithFriendlyUnitAtPixel:
 					li $t1, 1
@@ -856,6 +886,13 @@ CheckCollision:
 					CollisionResultsInKnockbackToTheLeft:
 						addi $s2, $s2, -8		# Knockback of 8 pixels to the left
 					CollisionKnockbackEnd:
+					j LoadLevel1
+				CollisionWithSkeletonArrowAtPixel:
+					li $t1, 1
+					la $t5, hearts
+					lw $t6, 0($t5)
+					addi $t6, $t6, -1
+					sw $t6, 0($t5)	# Decrement the number of lives by 1 after collision with skeleton arrow
 					j LoadLevel1
 				CheckCollisionInnerLoopIncrement:
 					addi $t3, $t3, 1
